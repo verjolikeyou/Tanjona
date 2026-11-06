@@ -1,0 +1,11 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "tanjona-1",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Tanjona 11e",
+  "start_url": "/",
+  "theme_color": "#4cc9f0"
+}
