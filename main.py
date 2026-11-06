@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Programme scolaire de 11e — version Flask optimisée.
+"""Programme scolaire de 11e — version Flask PWA.
 """
 
 from __future__ import annotations
 
 import sys
 import traceback
-from flask import Flask, render_template_string, redirect, url_for
+from flask import Flask, render_template_string, redirect, url_for, Response
 
 app = Flask(__name__)
 
-# Données structurées en dictionnaires Python natifs
 MENUS = {
     "home": {
         "title": "Programme en 11e",
@@ -86,7 +85,9 @@ TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Programme en 11e — Français et Mathématiques</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#4CC9F0">
+    <title>Programme en 11e — Tanjona</title>
     <style>
         body {
             background-color: {{ BG }};
@@ -98,6 +99,7 @@ TEMPLATE = """
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            box-sizing: border-box;
         }
         .container {
             background: #FFFFFF;
@@ -174,13 +176,52 @@ TEMPLATE = """
             </div>
         {% endif %}
     </div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
 </body>
 </html>
+"""
+
+MANIFEST_JSON = """{
+  "name": "Programme en 11e — Tanjona",
+  "short_name": "Tanjona 11e",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4FBFF",
+  "theme_color": "#4CC9F0",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2232/2232688.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}"""
+
+SW_JS = """
+self.addEventListener('install', (e) => {
+  e.waitUntil(self.skipWaiting());
+});
+self.addEventListener('fetch', (e) => {
+  e.respondWith(fetch(e.request));
+});
 """
 
 @app.route('/')
 def home():
     return redirect(url_for('navigate', route='home'))
+
+@app.route('/manifest.json')
+def manifest():
+    return Response(MANIFEST_JSON, mimetype='application/json')
+
+@app.route('/sw.js')
+def service_worker():
+    return Response(SW_JS, mimetype='application/javascript')
 
 @app.route('/route/<route>')
 def navigate(route):
@@ -218,4 +259,4 @@ def navigate(route):
         )
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
