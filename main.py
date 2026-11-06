@@ -1,23 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Programme scolaire de 11e — version Toga optimisée.
+"""Programme scolaire de 11e — version Flask optimisée.
 """
 
 from __future__ import annotations
 
-import base64
-import html as html_lib
-import json
-import re
 import sys
 import traceback
-from html.parser import HTMLParser
-from xml.sax.saxutils import escape
+from flask import Flask, render_template_string, redirect, url_for
 
-import toga
-from toga.style import Pack
-from toga.style.pack import COLUMN, CENTER
+app = Flask(__name__)
 
-# Données structurées en dictionnaires Python natifs (plus d'erreur JSON.loads)
+# Données structurées en dictionnaires Python natifs
 MENUS = {
     "home": {
         "title": "Programme en 11e",
@@ -63,7 +56,6 @@ MENUS = {
         "routes": {"1-Pose et effectue": "cours_pose_effectue", "1-Décompose": "cours_decompose"},
         "back": "home"
     }
-    # Ajoutez vos autres menus ici...
 }
 
 CONTENT = {
@@ -71,15 +63,14 @@ CONTENT = {
         "kind": "html",
         "title": "Boscher Iu",
         "html": """
-        <html><body style="font-family:'Comic Sans MS',sans-serif; text-align:center;">
+        <div style="font-family:'Comic Sans MS',sans-serif; text-align:center;">
             <p><span style="background:#0284C7; color:#fff; font-size:15pt; font-weight:bold; padding:6px 16px; border-radius:12px;">Méthode Boscher</span></p>
             <p style="font-size:18pt; font-weight:900; color:#D90429; margin-top:8px;">La rue à midi.</p>
             <p style="font-size:26pt; font-weight:900; color:#E11D48; letter-spacing:8px;">i &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; u</p>
-        </body></html>
+        </div>
         """,
         "back": "methode_boscher"
     }
-    # Ajoutez vos autres contenus ici...
 }
 
 BG = "#F4FBFF"
@@ -89,166 +80,142 @@ BLUE = "#4361EE"
 CYAN = "#80DEEA"
 GREEN = "#16804A"
 
+TEMPLATE = """
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programme en 11e — Français et Mathématiques</title>
+    <style>
+        body {
+            background-color: {{ BG }};
+            color: {{ INK }};
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: #FFFFFF;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+        h1 {
+            color: #D90429;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .btn-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: bold;
+            box-sizing: border-box;
+            transition: opacity 0.2s;
+        }
+        .btn-primary {
+            background-color: #4CC9F0;
+            color: #FFFFFF;
+        }
+        .btn-secondary {
+            background-color: #FFFFFF;
+            color: {{ PINK }};
+            border: 2px solid {{ PINK }};
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .content-box {
+            text-align: left;
+            margin: 20px 0;
+            padding: 15px;
+            background: #FAFAFA;
+            border-radius: 8px;
+            border: 1px solid #E2E8F0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        
+        {% if kind == 'menu' %}
+            <div class="btn-container">
+                {% for label, target in options.items() %}
+                    <a href="{{ url_for('navigate', route=target) }}" class="btn {% if is_home and loop.first %}btn-primary{% else %}btn-secondary{% endif %}">{{ label }}</a>
+                {% endfor %}
+                {% if back %}
+                    <a href="{{ url_for('navigate', route=back) }}" class="btn btn-secondary">← Retour</a>
+                {% endif %}
+            </div>
+        {% elif kind == 'content' %}
+            <div class="content-box">
+                {{ html_content | safe }}
+            </div>
+            <div class="btn-container">
+                <a href="{{ url_for('navigate', route=back) }}" class="btn btn-secondary">← Revenir</a>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
 
-class HTMLVersTexte(HTMLParser):
-    BLOCS = {"p", "div", "br", "table", "tr", "ul", "ol", "li", "h1", "h2", "h3", "blockquote"}
+@app.route('/')
+def home():
+    return redirect(url_for('navigate', route='home'))
 
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.parts = []
-        self.in_table_cell = False
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "br":
-            self.parts.append("\n")
-        elif tag == "li":
-            self.parts.append("\n• ")
-        elif tag in {"td", "th"}:
-            if self.in_table_cell:
-                self.parts.append("  |  ")
-            self.in_table_cell = True
-        elif tag in self.BLOCS:
-            self.parts.append("\n")
-
-    def handle_endtag(self, tag):
-        if tag in {"td", "th"}:
-            self.in_table_cell = True
-        elif tag in self.BLOCS:
-            self.parts.append("\n")
-
-    def handle_data(self, data):
-        self.parts.append(data)
-
-
-def html_en_texte(source: str) -> str:
-    try:
-        parser = HTMLVersTexte()
-        parser.feed(source)
-        text = "".join(parser.parts).replace("\xa0", " ")
-        text = re.sub(r"[ \t]+", " ", text)
-        text = re.sub(r" *\n *", "\n", text)
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        return text.strip()
-    except Exception:
-        return source
-
-
-class Programme11eme(toga.App):
-    def startup(self):
-        try:
-            self.state = {"route": "home", "subject": None}
-            self.main_window = toga.MainWindow(title="Programme en 11e — Français et Mathématiques")
-            self.render()
-            self.main_window.show()
-        except Exception as e:
-            print("ERREUR AU LANCEMENT :", e, file=sys.stderr)
-            traceback.print_exc()
-            raise e
-
-    def navigate(self, target):
-        if target == "program_fr":
-            self.state["subject"] = "Français"
-        elif target == "program_math":
-            self.state["subject"] = "Mathématiques"
-        self.state["route"] = target
-        self.render()
-
-    def back_to_parent(self, target):
-        if target == "program":
-            target = "program_math" if self.state.get("subject") == "Mathématiques" else "program_fr"
-        elif target == "home":
-            self.state["subject"] = None
-        self.navigate(target)
-
-    def make_button(self, label, target=None, primary=False, back_target=None):
-        if back_target is not None:
-            callback = lambda widget: self.back_to_parent(back_target)
-        else:
-            callback = lambda widget: self.navigate(target)
-
-        return toga.Button(
-            label,
-            on_press=callback,
-            style=Pack(
-                margin=8,
-                width=500,
-                height=50,
-                background_color="#4CC9F0" if primary else "#FFFFFF",
-                color="#FFFFFF" if primary else PINK,
-                font_size=14,
-            ),
+@app.route('/route/<route>')
+def navigate(route):
+    if route in MENUS:
+        data = MENUS[route]
+        options_dict = {label: data["routes"][label] for label in data["options"] if label in data["routes"]}
+        return render_template_string(
+            TEMPLATE,
+            title=data["title"],
+            kind="menu",
+            options=options_dict,
+            back=data.get("back"),
+            is_home=(route == "home"),
+            BG=BG, INK=INK, PINK=PINK, BLUE=BLUE, CYAN=CYAN, GREEN=GREEN
         )
-
-    def make_label(self, text, size=14, color=INK, bold=False, padding=4):
-        return toga.Label(
-            text,
-            style=Pack(
-                margin=padding,
-                font_size=size,
-                color=color,
-                font_weight="bold" if bold else "normal",
-                text_align=CENTER,
-            ),
-        )
-
-    def render_menu(self, route):
-        data = MENUS.get(route, MENUS["home"])
-        title = data["title"]
-        content = toga.Box(style=Pack(direction=COLUMN, flex=1, margin=16, background_color=BG))
-        content.add(self.make_label(title, size=22, color="#D90429", bold=True, padding=10))
-
-        buttons_box = toga.Box(style=Pack(direction=COLUMN, flex=1, margin=(4, 8)))
-        for label in data["options"]:
-            target = data["routes"].get(label)
-            if target:
-                buttons_box.add(self.make_button(label, target=target, primary=(route == "home")))
-
-        if data.get("back"):
-            buttons_box.add(self.make_button("← Retour", back_target=data["back"]))
-
-        scroll = toga.ScrollContainer(content=buttons_box, style=Pack(flex=1))
-        content.add(scroll)
-        content_box = content
-        return content_box
-
-    def render_content(self, route):
-        data = CONTENT.get(route, {"kind": "html", "html": "<p>Contenu non disponible</p>", "back": "home"})
-        back = data.get("back", "home")
+    elif route in CONTENT:
+        data = CONTENT[route]
         heading = data.get("title") or route.replace("_", " ").title()
-
-        root = toga.Box(style=Pack(direction=COLUMN, flex=1, margin=12, background_color=BG))
-        root.add(self.make_label(heading, size=20, color=PINK, bold=True, padding=8))
-
-        lesson_text = html_en_texte(data.get("html", ""))
-        lesson_label = toga.Label(
-            lesson_text or "Aucun contenu disponible.",
-            style=Pack(margin=16, font_size=14, color=INK),
+        return render_template_string(
+            TEMPLATE,
+            title=heading,
+            kind="content",
+            html_content=data.get("html", "<p>Contenu non disponible</p>"),
+            back=data.get("back", "home"),
+            BG=BG, INK=INK, PINK=PINK, BLUE=BLUE, CYAN=CYAN, GREEN=GREEN
         )
-        content_view = toga.ScrollContainer(
-            content=lesson_label,
-            style=Pack(flex=1, margin=6, background_color="#FFFFFF"),
+    else:
+        return render_template_string(
+            TEMPLATE,
+            title="Page non trouvée",
+            kind="content",
+            html_content="<p style='color:#B91C1C; text-align:center; font-weight:bold;'>Cette page n’a pas été trouvée.</p>",
+            back="home",
+            BG=BG, INK=INK, PINK=PINK, BLUE=BLUE, CYAN=CYAN, GREEN=GREEN
         )
-
-        root.add(content_view)
-        root.add(self.make_button("← Revenir", back_target=back))
-        return root
-
-    def render(self):
-        route = self.state["route"]
-        if route in MENUS:
-            view = self.render_menu(route)
-        elif route in CONTENT:
-            view = self.render_content(route)
-        else:
-            view = toga.Box(style=Pack(direction=COLUMN, flex=1, margin=20, align_items=CENTER, justify_content=CENTER))
-            view.add(self.make_label("Cette page n’a pas été trouvée.", size=20, color="#B91C1C", bold=True))
-            view.add(self.make_button("← Accueil", back_target="home"))
-        self.main_window.content = view
-
-
-def main():
-    return Programme11eme("Programme en 11e", "org.verjolikeyou.helloworld")
-
 
 if __name__ == "__main__":
-    main().main_loop()
+    app.run()
