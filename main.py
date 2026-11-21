@@ -1,14 +1,13 @@
-
 # -*- coding: utf-8 -*-
 """
 VerjoResultAccess - Flask Android / PC
-Version : Résultat non disponible
+Version : Résultat non disponible (avec intégration Google Search Console)
 
 Installation :
 python -m pip install flask
 
 Lancement :
-python VerjoResultAccess_FLASK_ANDROID_PC.py
+python main.py
 
 PC : http://127.0.0.1:5000
 Android : http://IP_DU_PC:5000
@@ -16,12 +15,28 @@ Android : http://IP_DU_PC:5000
 
 from pathlib import Path
 
-from flask import Flask, request, render_template_string, send_from_directory
+from flask import Flask, Response, request, render_template_string, send_from_directory
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "verjo-result-access-local-2026"
 
 BASE_DIR = Path(__file__).resolve().parent
+
+SITE_URL = "https://verjolikeyou.github.io/Tanjona/"
+GOOGLE_VERIFICATION_FILE = "google6de0069661b79218.html"
+GOOGLE_VERIFICATION_TOKEN = "google6de0069661b79218"
+GOOGLE_VERIFICATION_CONTENT = "google-site-verification: google6de0069661b79218.html"
+
+SITEMAP_XML = f'''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{SITE_URL}</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+'''
 
 
 PAGE = r'''<!doctype html>
@@ -33,6 +48,18 @@ PAGE = r'''<!doctype html>
           content="width=device-width, initial-scale=1, viewport-fit=cover">
 
     <meta name="theme-color" content="#2563eb">
+    <meta name="description"
+          content="Consultation des résultats du test d'accès en 1ère année Gestion Ankatso — Session 2026.">
+    <meta name="robots" content="index, follow">
+    <meta name="google-site-verification" content="{{ google_verification_token }}">
+
+    <link rel="canonical" href="{{ site_url }}">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Résultat test d'accès en Gestion Ankatso en 2026">
+    <meta property="og:description"
+          content="Portail officiel de consultation des résultats du test d'accès en Gestion Ankatso (Session 2026).">
+    <meta property="og:url" content="{{ site_url }}">
 
     <title>Résultat test d'accès en Gestion Ankatso en 2026</title>
 
@@ -393,6 +420,24 @@ PAGE = r'''<!doctype html>
             text-transform: uppercase;
         }
 
+        .site-footer {
+            margin-top: 16px;
+            padding: 10px 4px 4px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .site-footer a {
+            color: var(--blue);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .site-footer a:hover {
+            text-decoration: underline;
+        }
+
         /* RESPONSIVE ANDROID */
 
         @media (max-width: 650px) {
@@ -737,6 +782,11 @@ PAGE = r'''<!doctype html>
     </section>
 
 
+    <footer class="site-footer">
+        <span>Portail officiel :</span>
+        <a href="{{ site_url }}" target="_blank" rel="noopener noreferrer">{{ site_url }}</a>
+    </footer>
+
 </div>
 
 </body>
@@ -751,6 +801,62 @@ def logo():
     return send_from_directory(
         str(BASE_DIR),
         "gestion.jpg"
+    )
+
+
+# VERIFICATION GOOGLE SEARCH CONSOLE (FICHIER HTML)
+@app.route(f"/{GOOGLE_VERIFICATION_FILE}")
+@app.route(f"/Tanjona/{GOOGLE_VERIFICATION_FILE}")
+def google_verification():
+
+    verification_path = BASE_DIR / GOOGLE_VERIFICATION_FILE
+
+    if verification_path.is_file():
+        return send_from_directory(
+            str(BASE_DIR),
+            GOOGLE_VERIFICATION_FILE,
+            mimetype="text/html; charset=utf-8"
+        )
+
+    return Response(
+        GOOGLE_VERIFICATION_CONTENT,
+        mimetype="text/html; charset=utf-8"
+    )
+
+
+# SITEMAP XML
+@app.route("/sitemap.xml")
+@app.route("/Tanjona/sitemap.xml")
+def sitemap():
+
+    sitemap_path = BASE_DIR / "sitemap.xml"
+
+    if sitemap_path.is_file():
+        return send_from_directory(
+            str(BASE_DIR),
+            "sitemap.xml",
+            mimetype="application/xml; charset=utf-8"
+        )
+
+    return Response(
+        SITEMAP_XML,
+        mimetype="application/xml; charset=utf-8"
+    )
+
+
+# ROBOTS.TXT
+@app.route("/robots.txt")
+def robots():
+
+    robots_txt = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        f"Sitemap: {SITE_URL}sitemap.xml\n"
+    )
+
+    return Response(
+        robots_txt,
+        mimetype="text/plain; charset=utf-8"
     )
 
 
@@ -789,6 +895,8 @@ def index():
             BASE_DIR / "gestion.jpg"
         ).is_file(),
 
+        site_url=SITE_URL,
+        google_verification_token=GOOGLE_VERIFICATION_TOKEN,
         centre=centre,
         nom=nom,
         prenom=prenom,
